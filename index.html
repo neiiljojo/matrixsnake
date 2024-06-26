@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix Snake Game</title>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        .grid {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: grid;
+            background-color: black;
+        }
+        .grid-cell {
+            border: 1px solid rgb(0, 0, 0);
+            transition: background-color 0.05s ease;
+        }
+        #score, #message {
+            position: fixed;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 24px;
+            z-index: 1000;
+            text-align: center;
+        }
+        #score {
+            top: 10px;
+        }
+        #message {
+            top: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        #refresh {
+            cursor: pointer;
+            font-size: 36px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="score">Trail Length: 3</div>
+    <div id="message">Move over the white dot to begin, and keep moving!</div>
+    <div class="grid" id="grid"></div>
+
+    <script>
+        const grid = document.getElementById('grid');
+        const scoreElement = document.getElementById('score');
+        const messageElement = document.getElementById('message');
+        const cellSize = 10; // px
+        const rows = Math.ceil(window.innerHeight / cellSize);
+        const cols = Math.ceil(window.innerWidth / cellSize);
+
+        const greenShades = [
+            '#00FF00', '#32CD32', '#228B22', '#006400', '#023020'
+        ];
+
+        let trailLength = 3;
+        let trail = [];
+        let food = null;
+        let gameStarted = false;
+        let lastMoveTime = 0;
+        const movementTimeout = 500; // 500ms timeout for movement
+
+        function initializeGrid() {
+            grid.innerHTML = '';
+            for (let i = 0; i < rows * cols; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'grid-cell';
+                grid.appendChild(cell);
+            }
+            grid.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
+            grid.style.gridTemplateRows = `repeat(${rows}, ${cellSize}px)`;
+        }
+
+        function getRandomGreenShade() {
+            return greenShades[Math.floor(Math.random() * greenShades.length)];
+        }
+
+        function getRandomPosition() {
+            return {
+                x: Math.floor(Math.random() * cols),
+                y: Math.floor(Math.random() * rows)
+            };
+        }
+
+        function spawnFood() {
+            const pos = getRandomPosition();
+            food = pos.y * cols + pos.x;
+            grid.children[food].style.backgroundColor = 'white';
+        }
+
+        function updateScore() {
+            scoreElement.textContent = `Trail Length: ${trailLength}`;
+        }
+
+        function startGame() {
+            gameStarted = true;
+            messageElement.style.display = 'none';
+            updateScore();
+        }
+
+        function endGame() {
+            gameStarted = false;
+            messageElement.innerHTML = 'You lost!<br><span id="refresh">&#x21bb;</span>';
+            messageElement.style.display = 'block';
+            messageElement.style.color = 'red';
+            document.getElementById('refresh').addEventListener('click', resetGame);
+            
+            // Start the Matrix rain effect
+            startMatrixRain();
+        }
+
+        function startMatrixRain() {
+            const columns = new Array(cols).fill(0);
+            const maxDelay = 5000; // 5 seconds
+
+            function rainDrop() {
+                let allColumnsFilled = true;
+
+                for (let x = 0; x < cols; x++) {
+                    if (columns[x] < rows) {
+                        const y = columns[x];
+                        const index = y * cols + x;
+                        grid.children[index].style.backgroundColor = getRandomGreenShade();
+                        columns[x]++;
+                        allColumnsFilled = false;
+                    }
+                }
+
+                if (!allColumnsFilled) {
+                    requestAnimationFrame(rainDrop);
+                }
+            }
+
+            // Start each column with a random delay
+            for (let x = 0; x < cols; x++) {
+                setTimeout(() => {
+                    columns[x] = 0;
+                    rainDrop();
+                }, Math.random() * maxDelay);
+            }
+        }
+
+        function resetGame() {
+            location.reload();
+        }
+
+        function getLinePoints(x0, y0, x1, y1) {
+            const points = [];
+            const dx = Math.abs(x1 - x0);
+            const dy = Math.abs(y1 - y0);
+            const sx = (x0 < x1) ? 1 : -1;
+            const sy = (y0 < y1) ? 1 : -1;
+            let err = dx - dy;
+
+            while (true) {
+                points.push({x: x0, y: y0});
+                if (x0 === x1 && y0 === y1) break;
+                const e2 = 2 * err;
+                if (e2 > -dy) { err -= dy; x0 += sx; }
+                if (e2 < dx) { err += dx; y0 += sy; }
+            }
+            return points;
+        }
+
+        function updateTrail(newX, newY) {
+            if (trail.length === 0) {
+                trail.push({x: newX, y: newY});
+                return;
+            }
+
+            const newPoints = getLinePoints(trail[trail.length - 1].x, trail[trail.length - 1].y, newX, newY);
+            
+            // Check for collision with the trail
+            for (let i = 1; i < newPoints.length; i++) {
+                const point = newPoints[i];
+                if (isCollision(point.x, point.y)) {
+                    endGame();
+                    return;
+                }
+            }
+
+            trail.push(...newPoints.slice(1));
+
+            // Keep only the last 'trailLength' points
+            while (trail.length > trailLength) {
+                trail.shift();
+            }
+
+            // Clear all cells
+            for (let i = 0; i < grid.children.length; i++) {
+                grid.children[i].style.backgroundColor = '';
+            }
+
+            // Color the trail
+            trail.forEach((point, i) => {
+                const index = point.y * cols + point.x;
+                const cell = grid.children[index];
+                cell.style.backgroundColor = getRandomGreenShade();
+            });
+
+            // Redraw the food
+            if (food !== null) {
+                grid.children[food].style.backgroundColor = 'white';
+            }
+        }
+
+        function isCollision(x, y) {
+            // Check if the point (x, y) collides with the trail
+            // We exclude the last few points to prevent false collisions when the trail is turning
+            const safeLength = Math.min(5, Math.floor(trailLength / 2));
+            for (let i = 0; i < trail.length - safeLength; i++) {
+                if (trail[i].x === x && trail[i].y === y) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        document.addEventListener('mousemove', (e) => {
+            const currentTime = new Date().getTime();
+            if (currentTime - lastMoveTime > movementTimeout && gameStarted) {
+                endGame();
+                return;
+            }
+            lastMoveTime = currentTime;
+
+            const x = Math.floor(e.clientX / cellSize);
+            const y = Math.floor(e.clientY / cellSize);
+            const index = y * cols + x;
+
+            if (!gameStarted) {
+                if (index === food) {
+                    startGame();
+                    spawnFood(); // Spawn new food when the game starts
+                }
+            } else {
+                updateTrail(x, y);
+                if (index === food) {
+                    trailLength += 5; // Increase by 5 instead of 2
+                    updateScore();
+                    spawnFood(); // Spawn new food when current food is eaten
+                }
+            }
+        });
+
+        initializeGrid();
+        spawnFood();
+    </script>
+</body>
+</html>
