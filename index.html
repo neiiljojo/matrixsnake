@@ -63,6 +63,7 @@
         const cellSize = 10; // px
         const rows = Math.ceil(window.innerHeight / cellSize);
         const cols = Math.ceil(window.innerWidth / cellSize);
+        const padding = 5; // Padding of 5 cells from the edge
 
         const greenShades = [
             '#00FF00', '#32CD32', '#228B22', '#006400', '#023020'
@@ -73,7 +74,8 @@
         let food = null;
         let gameStarted = false;
         let lastMoveTime = 0;
-        const movementTimeout = 500; // 500ms timeout for movement
+        const movementTimeout = 500; // timeout
+        let matrixRainInterval;
 
         function initializeGrid() {
             grid.innerHTML = '';
@@ -92,8 +94,8 @@
 
         function getRandomPosition() {
             return {
-                x: Math.floor(Math.random() * cols),
-                y: Math.floor(Math.random() * rows)
+                x: Math.floor(Math.random() * (cols - 2 * padding)) + padding,
+                y: Math.floor(Math.random() * (rows - 2 * padding)) + padding
             };
         }
 
@@ -120,42 +122,59 @@
             messageElement.style.color = 'red';
             document.getElementById('refresh').addEventListener('click', resetGame);
             
-            // Start the Matrix rain effect
             startMatrixRain();
         }
 
         function startMatrixRain() {
-            const columns = new Array(cols).fill(0);
-            const maxDelay = 5000; // 5 seconds
+            const rainDrops = [];
+            const dropLength = 20; // Length of each rain drop
+            const maxDrops = Math.floor(cols * 0.1); // 10% of columns at any time
 
-            function rainDrop() {
-                let allColumnsFilled = true;
+            function createDrop() {
+                if (rainDrops.length < maxDrops) {
+                    rainDrops.push({
+                        x: Math.floor(Math.random() * cols),
+                        y: -dropLength,
+                        speed: Math.random() * 5 + 0.5, // Increased speed
+                        color: getRandomGreenShade()
+                    });
+                }
+            }
 
-                for (let x = 0; x < cols; x++) {
-                    if (columns[x] < rows) {
-                        const y = columns[x];
-                        const index = y * cols + x;
-                        grid.children[index].style.backgroundColor = getRandomGreenShade();
-                        columns[x]++;
-                        allColumnsFilled = false;
+            function updateRain() {
+                // Clear all cells
+                for (let i = 0; i < grid.children.length; i++) {
+                    grid.children[i].style.backgroundColor = '';
+                }
+
+                // Update and draw rain drops
+                for (let i = rainDrops.length - 1; i >= 0; i--) {
+                    const drop = rainDrops[i];
+                    drop.y += drop.speed;
+
+                    // Draw the drop
+                    for (let j = 0; j < dropLength; j++) {
+                        const y = Math.floor(drop.y) - j;
+                        if (y >= 0 && y < rows) {
+                            const index = y * cols + drop.x;
+                            grid.children[index].style.backgroundColor = drop.color;
+                        }
+                    }
+
+                    // Remove drop if it's off screen
+                    if (drop.y > rows) {
+                        rainDrops.splice(i, 1);
                     }
                 }
 
-                if (!allColumnsFilled) {
-                    requestAnimationFrame(rainDrop);
-                }
+                createDrop();
             }
 
-            // Start each column with a random delay
-            for (let x = 0; x < cols; x++) {
-                setTimeout(() => {
-                    columns[x] = 0;
-                    rainDrop();
-                }, Math.random() * maxDelay);
-            }
+            matrixRainInterval = setInterval(updateRain, 30); // Update every 30ms (increased from 50ms)
         }
 
         function resetGame() {
+            clearInterval(matrixRainInterval);
             location.reload();
         }
 
@@ -221,7 +240,7 @@
 
         function isCollision(x, y) {
             // Check if the point (x, y) collides with the trail
-            // We exclude the last few points to prevent false collisions when the trail is turning
+            // prevent false collisions when the trail is turning
             const safeLength = Math.min(5, Math.floor(trailLength / 2));
             for (let i = 0; i < trail.length - safeLength; i++) {
                 if (trail[i].x === x && trail[i].y === y) {
@@ -251,7 +270,7 @@
             } else {
                 updateTrail(x, y);
                 if (index === food) {
-                    trailLength += 5; // Increase by 5 instead of 2
+                    trailLength += 5; // Increase by 5 each time a point is eaten
                     updateScore();
                     spawnFood(); // Spawn new food when current food is eaten
                 }
